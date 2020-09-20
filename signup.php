@@ -1,36 +1,73 @@
 <?php
 
-// 新規登録
+namespace MyApp\Controller;
 
-require_once(__DIR__ . '/../config/config.php');
+class Signup extends \MyApp\Controller {
 
-$app = new MyApp\Controller\Signup();
+  public function run() {
+    if ($this->isLoggedIn()) {
+      header('Location: ' . SITE_URL);
+      exit;
+    }
 
-$app->run();
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+      $this->postProcess();
+    }
+  }
 
-?>
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="utf-8">
-  <title>Sign Up</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <div id="container">
-    <form action="" method="post" id="signup">
-      <p>
-        <input type="text" name="email" placeholder="email" value="<?= isset($app->getValues()->email) ? h($app->getValues()->email) : ''; ?>">
-      </p>
-      <p class="err"><?= h($app->getErrors('email')); ?></p>
-      <p>
-        <input type="password" name="password" placeholder="password">
-      </p>
-      <p class="err"><?= h($app->getErrors('password')); ?></p>
-      <div class="btn" onclick="document.getElementById('signup').submit();">Sign Up</div>
-      <p class="fs12"><a href="/login.php">Log In</a></p>
-      <input type="hidden" name="token" value="<?= h($_SESSION['token']); ?>">
-    </form>
-  </div>
-</body>
-</html>
+  protected function postProcess() {
+    // validate
+    try {
+      $this->_validate();
+    } catch (\MyApp\Exception\InvalidEmail $e) {
+      // echo $e->getMessage();
+      // exit;
+      $this->setErrors('email', $e->getMessage());
+    } catch (\MyApp\Exception\InvalidPassword $e) {
+      // echo $e->getMessage();
+      // exit;
+      $this->setErrors('password', $e->getMessage());
+    }
+
+    // echo "success";
+    // exit;
+
+    $this->setValues('email', $_POST['email']);
+
+    if ($this->hasError()) {
+      return;
+    } else {
+      // create user
+      try {
+        $userModel = new \MyApp\Model\User();
+        $userModel->create([
+          'email' => $_POST['email'],
+          'password' => $_POST['password']
+        ]);
+      } catch (\MyApp\Exception\DuplicateEmail $e) {
+        $this->setErrors('email', $e->getMessage());
+        return;
+      }
+
+      // redirect to login
+      header('Location: ' . SITE_URL . '/login.php');
+      exit;
+    }
+  }
+
+  private function _validate() {
+    if (!isset($_POST['token']) || $_POST['token'] !== $_SESSION['token']) {
+      echo "Invalid Token!";
+      exit;
+    }
+
+    if (!filter_var($_POST['email'], FILTER_VALIDATE_EMAIL)) {
+      throw new \MyApp\Exception\InvalidEmail();
+    }
+
+    if (!preg_match('/\A[a-zA-Z0-9]+\z/', $_POST['password'])) {
+      throw new \MyApp\Exception\InvalidPassword();
+    }
+  }
+
+}
